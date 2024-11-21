@@ -22,6 +22,12 @@ def Bazaar.ext
     funext
     apply e
 
+def Bazaar.injEq_continuation {b₁ b₂ : Bazaar α β τ}
+  (p : b₁ = b₂) (v : Vector _ _)
+  : b₁.continuation v
+    = b₂.continuation ((by rw [p] : b₁.length = b₂.length) ▸ v)
+  := match p with | rfl => rfl
+
 instance : Functor (Bazaar α β) where
   map f | ⟨l, xs, k⟩ => ⟨l, xs, f ∘ k⟩
   mapConst x | ⟨l, xs, _⟩ => ⟨l, xs, Function.const _ x⟩
@@ -46,6 +52,33 @@ instance : LawfulFunctor (Bazaar α β) where
       ]
   id_map := by intros; rfl
   comp_map := by intros; rfl
+
+def Bazaar.map_elements (f : α₁ → α₂) : Bazaar α₁ β τ → Bazaar α₂ β τ
+  | ⟨l, xs, k⟩ => ⟨l, Vector.map f xs, k⟩
+
+@[simp] theorem Bazaar.map_elements_def
+  : map_elements f ⟨l, xs, k⟩ = ⟨l, Vector.map f xs, k⟩
+  := rfl
+
+def Bazaar.map_continuation (f : β₁ → β₂) : Bazaar α β₂ τ → Bazaar α β₁ τ
+  | ⟨l, xs, k⟩ => ⟨l, xs, k ∘ Vector.map f⟩
+
+@[simp] theorem Bazaar.map_continuation_def
+  : map_continuation f ⟨l, xs, k⟩ = ⟨l, xs, k ∘ Vector.map f⟩
+  := rfl
+
+@[simp] theorem Bazaar.map_map_elements
+  : f <$> (map_elements g b) = map_elements g (f <$> b)
+  := rfl
+
+@[simp] theorem Bazaar.map_map_continuation
+  : f <$> (map_continuation g b) = map_continuation g (f <$> b)
+  := rfl
+
+@[simp] theorem Bazaar.map_continuation_map_elements
+  : map_continuation f (map_elements g b)
+    = map_elements g (map_continuation f b)
+  := rfl
 
 def Mathlib.Vector.unappend n m (v : Vector α (n + m)) : Vector α n × Vector α m
   :=
@@ -211,6 +244,22 @@ def Bazaar.sell (x : α) : Bazaar α β β :=
   , continuation := Vector.head
   }
 
+@[simp] theorem Bazaar.sell_def
+  : sell (β:=β) x = ⟨1, x ::ᵥ Vector.nil, Vector.head⟩
+  := rfl
+
+theorem Bazaar.map_continuation_sell
+  : map_continuation f (sell x) = f <$> sell x
+  := by
+    simp only [sell_def, map_continuation_def, map_def]
+    congr
+    funext _
+    simp only [Function.comp_apply, Vector.head_map]
+
+@[simp] theorem Bazaar.map_elements_sell
+  : map_elements f (sell x) = sell (β:=β) (f x)
+  := rfl
+
 def Bazaar.length_parametric.emptied {α β : Type u}
   : ApplicativeTransformation
     (Bazaar α β)
@@ -278,6 +327,84 @@ theorem Bazaar.elements_parametric {α β₁ β₂ : Type u}
       , q β₂
       , LawfulTraversable.comp_traverse
       ]
+    rfl
+
+def Bazaar.length_preserved_by_map.elemented (f : α₁ → α₂)
+  : ApplicativeTransformation (Bazaar α₁ β) (Bazaar α₂ β)
+  :=
+    { app := λ_ => map_elements f
+    , preserves_pure' := λ_ => rfl
+    , preserves_seq' := by
+        intro _ _ ⟨_, _, _⟩ ⟨_, _, _⟩
+        dsimp only [seq_def, map_elements_def]
+        congr
+        apply Vector.eq
+        simp only [Vector.toList_map, Vector.toList_append, List.map_append]
+    }
+
+theorem Bazaar.length_preserved_by_map
+  [Traversable t] [LawfulTraversable t] (xs : t α)
+  : (traverse (sell (β:=β)) xs).length
+    = (traverse (sell (β:=β)) (f <$> xs)).length
+  := by
+    rw [Traversable.traverse_map]
+    have p
+      : sell ∘ f = (length_preserved_by_map.elemented f).app _ ∘ sell (β:=β)
+      := rfl
+    rw [p, ← LawfulTraversable.naturality (length_preserved_by_map.elemented f)]
+    rfl
+
+theorem Bazaar.continuation_parametric
+  [Traversable t] [LawfulTraversable t] {xs : t α} {ys : Vector _ _}
+  : (traverse (sell (β:=β)) (f <$> xs)).continuation ys
+    = (traverse sell xs).continuation (length_preserved_by_map xs ▸ ys)
+  := by
+    have p
+      : sell ∘ f = (length_preserved_by_map.elemented f).app _ ∘ sell (β:=β)
+      := rfl
+    have q
+      : traverse (sell (β:=β)) (f <$> xs) = map_elements f (traverse sell xs)
+      := by
+        rw
+          [ Traversable.traverse_map
+          , p
+          , ← LawfulTraversable.naturality (length_preserved_by_map.elemented f)
+          ]
+        rfl
+    rw [injEq_continuation q]
+    rfl
+
+def Bazaar.map_continuation_traverse.continued (f : β₁ → β₂)
+  : ApplicativeTransformation (Bazaar α β₂) (Bazaar α β₁)
+  :=
+    { app := λ_ => map_continuation f
+    , preserves_pure' := λ_ => rfl
+    , preserves_seq' := by
+        intro _ _ ⟨_, _, _⟩ ⟨_, _, _⟩
+        dsimp only [seq_def, map_continuation_def, Function.comp_apply]
+        congr
+        funext _
+        simp only
+          [ Function.comp_apply
+          , Vector.map_unappend_1
+          , Vector.map_unappend_2
+          ]
+    }
+
+theorem Bazaar.map_continuation_traverse {α β₁ β₂ : Type u}
+  [Traversable t] [LawfulTraversable t] (xs : t α) (f : β₁ → β₂)
+  : Bazaar.map_continuation f (traverse sell xs)
+    = Functor.map f <$> traverse sell xs
+  := by
+    show map_continuation_traverse.continued _ (traverse _ _) = _
+    rw [LawfulTraversable.naturality (map_continuation_traverse.continued f)]
+    dsimp only [map_continuation_traverse.continued]
+    conv_lhs =>
+      arg 1
+      ext
+      dsimp only [Function.comp_apply]
+      rw [map_continuation_sell]
+    rw [Traversable.map_traverse]
     rfl
 
 def Bazaar.traverse_length.folded
@@ -426,8 +553,10 @@ def Bazaar.traverse.apply [Applicative F] [LawfulApplicative F] (f : α → F β
 theorem Bazaar.traverse_universal
   [Applicative F] [LawfulApplicative F] [Traversable t] [LawfulTraversable t]
   {f : α → F β} {xs : t α}
-  : traverse f xs = traverse.apply f (traverse sell xs)
+  : traverse f xs = (traverse sell xs).continuation
+    <$> Vector.traverse f (traverse sell xs).elements
   := by
+    show _ = traverse.apply f _
     rw [LawfulTraversable.naturality (traverse.apply f)]
     congr
     funext _
