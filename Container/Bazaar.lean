@@ -242,15 +242,41 @@ theorem Bazaar.length_parametric {α β₁ β₂ : Type u}
       ]
     rfl
 
-theorem Bazaar.elements_parametric
+theorem Bazaar.elements_parametric {α β₁ β₂ : Type u}
   [Traversable t] [LawfulTraversable t] (xs : t α)
   : (traverse (sell (β:=β₁)) xs).elements
     = Bazaar.length_parametric xs ▸ (traverse (sell (β:=β₂)) xs).elements
-  := by admit -- use emptied
+  := by
+    apply Vector.eq
+    simp only [Vector.length_cast_toList]
+    have p
+      : ∀β τ (b : Bazaar α β τ),
+        b.elements = (length_parametric.emptied b).run.elements
+      := λ_ _ _ => rfl
+    have q
+      : ∀(β : Type u), length_parametric.emptied.app β ∘ sell (α:=α)
+        = Functor.Comp.mk
+          ∘ Functor.map (Function.const PEmpty $ Functor.Const.mk PUnit.unit)
+          ∘ sell
+      := λ_ => rfl
+    have e
+      := λβ =>
+        LawfulTraversable.naturality length_parametric.emptied (sell (β:=β)) xs
+    rw
+      [ p β₁
+      , congrArg (λc => c.run.elements.toList) (e β₁) -- ???
+      , p β₂
+      , congrArg (λc => c.run.elements.toList) (e β₂)
+      , q β₁
+      , LawfulTraversable.comp_traverse
+      , q β₂
+      , LawfulTraversable.comp_traverse
+      ]
+    rfl
 
 def Bazaar.traverse_length.folded
   : ApplicativeTransformation
-    (Bazaar α β)
+    (Bazaar α PUnit)
     (Functor.Const (Monoid.Foldl (ULift ℕ)))
   :=
     { app := λ_ b => Functor.Const.mk
@@ -274,11 +300,18 @@ theorem Bazaar.traverse_length [Traversable t] [LawfulTraversable t] (xs : t α)
   := by
     rw [length_parametric (β₁:=β) (β₂:=PUnit)]
     unfold Traversable.length Traversable.foldl Traversable.foldMap
-    admit -- use folded
+    set inc := fun l _ => ULift.up (ULift.down l + 1)
+    have p
+      : Functor.Const.mk' ∘ Monoid.Foldl.mk ∘ flip inc
+        = traverse_length.folded.app _ ∘ sell
+      := rfl
+    rw [p, ← LawfulTraversable.naturality traverse_length.folded]
+    show _ + _ = _
+    apply Nat.zero_add
 
 def Bazaar.traverse_toList.listed
   : ApplicativeTransformation
-    (Bazaar α β)
+    (Bazaar α PUnit)
     (Functor.Const (Monoid.Foldl (List α)))
   :=
     { app := λ_ b => Functor.Const.mk
@@ -308,5 +341,15 @@ theorem Bazaar.traverse_toList [Traversable t] [LawfulTraversable t] (xs : t α)
   : Traversable.toList xs = (traverse (sell (β:=β)) xs).elements.toList
   := by
     rw [elements_parametric (β₁:=β) (β₂:=PUnit)]
+    simp only [Vector.length_cast_toList]
     unfold Traversable.toList Traversable.foldl Traversable.foldMap
-    admit -- use listed
+    dsimp only [Function.comp_apply]
+
+    have p
+      : Functor.Const.mk' ∘ Monoid.Foldl.mk ∘ flip (flip List.cons)
+        = traverse_toList.listed.app _ ∘ sell (α:=α)
+      := rfl
+    rw [p, ← LawfulTraversable.naturality traverse_toList.listed]
+    simp only [traverse_toList.listed]
+    show List.reverse (_ ++ _) = _
+    simp only [List.append_nil, List.reverse_reverse]
