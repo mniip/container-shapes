@@ -3,10 +3,7 @@ import Mathlib.Control.Fold
 import Mathlib.Control.Functor
 import Mathlib.Data.Vector.Basic
 
-open Function (const)
-open Functor (Const mapConst Comp)
 open Mathlib (Vector)
-open PUnit (unit)
 
 structure Bazaar (α β τ : Type u) : Type u where
   length : ℕ
@@ -27,14 +24,14 @@ def Bazaar.ext
 
 instance : Functor (Bazaar α β) where
   map f | ⟨l, xs, k⟩ => ⟨l, xs, f ∘ k⟩
-  mapConst x | ⟨l, xs, _⟩ => ⟨l, xs, const _ x⟩
+  mapConst x | ⟨l, xs, _⟩ => ⟨l, xs, Function.const _ x⟩
 
 @[simp] theorem Bazaar.map_def
   : f <$> Bazaar.mk l xs k = ⟨l, xs, f ∘ k⟩
   := rfl
 
 @[simp] theorem Bazaar.mapConst_def
-  : mapConst x (Bazaar.mk l xs k) = ⟨l, xs, const _ x⟩
+  : Functor.mapConst x (Bazaar.mk l xs k) = ⟨l, xs, Function.const _ x⟩
   := rfl
 
 instance : LawfulFunctor (Bazaar α β) where
