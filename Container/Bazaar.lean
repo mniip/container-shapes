@@ -57,6 +57,12 @@ def Mathlib.Vector.unappend n m (v : Vector α (n + m)) : Vector α n × Vector 
   : (p ▸ v).toList = v.toList
   := match p with | rfl => rfl
 
+@[simp] theorem Mathlib.Vector.length_cast_traverse
+  [Applicative F] [LawfulFunctor F]
+  {p : n = m} {f : α → F β} {v : Vector α n}
+  : Vector.traverse f (p ▸ v) = (λw => p ▸ w) <$> Vector.traverse f v
+  := match p with | rfl => by symm; apply id_map
+
 @[simp] theorem Mathlib.Vector.unappend_append
   : unappend _ _ (append xs ys) = ⟨xs, ys⟩
   := by
@@ -109,7 +115,7 @@ def Mathlib.Vector.unappend n m (v : Vector α (n + m)) : Vector α n × Vector 
       ]
 
 theorem Mathlib.Vector.append_ind {motive : Vector α (m + n) → Prop}
-  (p : ∀xs ys, motive (Vector.append xs ys)) v
+  (p : ∀xs ys, motive (append xs ys)) v
   : motive v
   := by
     rw [← append_unappend (v:=v)]
@@ -353,3 +359,76 @@ theorem Bazaar.traverse_toList [Traversable t] [LawfulTraversable t] (xs : t α)
     simp only [traverse_toList.listed]
     show List.reverse (_ ++ _) = _
     simp only [List.append_nil, List.reverse_reverse]
+
+@[simp] theorem Vector.traverse_nil [Applicative F] {f : α → F β}
+  : Vector.traverse f Vector.nil = pure Vector.nil
+  := rfl
+
+@[simp] theorem Vector.traverse_append {ys : Vector α m}
+  [Applicative F] [LawfulApplicative F] {f : α → F β}
+  : Vector.traverse f (Vector.append xs ys)
+    = Vector.append <$> Vector.traverse f xs <*> Vector.traverse f ys
+  := by
+    induction xs with
+    | nil =>
+      have p α (v : Vector α m)
+        : Vector.append Vector.nil v = (Nat.zero_add m).symm ▸ v
+        := by
+          apply Vector.eq
+          simp only
+            [ Vector.toList_append
+            , Vector.toList_empty
+            , List.nil_append
+            , Vector.length_cast_toList
+            ]
+      rw [p]
+      simp only [Vector.length_cast_traverse, traverse_nil, functor_norm]
+      congr
+      funext _
+      rw [p]
+    | cons IH =>
+      have p α n x (a : Vector α n) (b : Vector α m)
+        : Vector.append (x ::ᵥ a) b
+          = (Nat.succ_add n m).symm ▸ (x ::ᵥ (Vector.append a b))
+        := by
+          apply Vector.eq
+          simp only
+            [ Vector.toList_append
+            , Vector.toList_cons
+            , List.cons_append
+            , Vector.length_cast_toList
+            ]
+      conv_lhs => rw [p, Vector.length_cast_traverse, Vector.traverse_def, IH]
+      conv_rhs => rw [Vector.traverse_def]
+      simp only [functor_norm]
+      congr
+      funext _ _ _
+      dsimp only [Function.comp_apply]
+      rw [p]
+
+def Bazaar.traverse.apply [Applicative F] [LawfulApplicative F] (f : α → F β)
+  : ApplicativeTransformation (Bazaar α β) F
+  :=
+    { app := λ_ b => b.continuation <$> Vector.traverse f b.elements
+    , preserves_pure' := by
+        intro _ _
+        dsimp only [pure_def, Vector.traverse_nil]
+        rw [LawfulApplicative.map_pure]
+    , preserves_seq' := by
+        intro _ _ ⟨_, _, _⟩ ⟨_, _, _⟩
+        simp only [seq_def, Vector.traverse_append, functor_norm]
+        congr
+        funext _ _
+        dsimp only [Function.comp_apply]
+        rw [Vector.unappend_append]
+    }
+
+theorem Bazaar.traverse_universal
+  [Applicative F] [LawfulApplicative F] [Traversable t] [LawfulTraversable t]
+  {f : α → F β} {xs : t α}
+  : traverse f xs = traverse.apply f (traverse sell xs)
+  := by
+    rw [LawfulTraversable.naturality (traverse.apply f)]
+    congr
+    funext _
+    simp [traverse.apply, sell]
