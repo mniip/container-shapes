@@ -112,7 +112,7 @@ theorem Mathlib.Vector.append_ind {motive : Vector α (m + n) → Prop}
   (p : ∀xs ys, motive (Vector.append xs ys)) v
   : motive v
   := by
-    rw [<- append_unappend (v:=v)]
+    rw [← append_unappend (v:=v)]
     apply p
 
 instance : Applicative (Bazaar α β) where
@@ -205,29 +205,42 @@ def Bazaar.sell (x : α) : Bazaar α β β :=
   , continuation := Vector.head
   }
 
-def Bazaar.length_parametric.emptied
-  : ApplicativeTransformation (Bazaar α β) (Bazaar α Empty)
+def Bazaar.length_parametric.emptied {α β : Type u}
+  : ApplicativeTransformation
+    (Bazaar α β)
+    (Functor.Comp (Bazaar α PEmpty) (Functor.Const PUnit))
   :=
-    { app := λ_ ⟨l, e, k⟩ => ⟨l, e, k ∘ Vector.map Empty.elim⟩
+    { app := λ_ ⟨l, e, _⟩ => Functor.Comp.mk
+        ⟨l, e, λ_ => Functor.Const.mk PUnit.unit⟩
     , preserves_pure' := λ _ => rfl
-    , preserves_seq' := by
-        intro _ _ _ _
-        apply Bazaar.ext
-        case length => rfl
-        case elements => rfl
-        case continuation =>
-          intro _
-          simp only
-            [ Function.comp_apply
-            , Vector.map_unappend_1
-            , Vector.map_unappend_2
-            ]
+    , preserves_seq' := λ_ _ => rfl
     }
 
-theorem Bazaar.length_parametric
+theorem Bazaar.length_parametric {α β₁ β₂ : Type u}
   [Traversable t] [LawfulTraversable t] (xs : t α)
   : (traverse (sell (β:=β₁)) xs).length = (traverse (sell (β:=β₂)) xs).length
-  := by admit -- use emptied
+  := by
+    have p
+      : ∀β τ (b : Bazaar α β τ),
+        b.length = (length_parametric.emptied b).run.length
+      := λ_ _ _ => rfl
+    have q
+      : ∀(β : Type u), length_parametric.emptied.app β ∘ sell (α:=α)
+        = Functor.Comp.mk
+          ∘ Functor.map (Function.const PEmpty $ Functor.Const.mk PUnit.unit)
+          ∘ sell
+      := λ_ => rfl
+    rw
+      [ p β₁
+      , LawfulTraversable.naturality length_parametric.emptied sell xs
+      , p β₂
+      , LawfulTraversable.naturality length_parametric.emptied sell xs
+      , q β₁
+      , LawfulTraversable.comp_traverse
+      , q β₂
+      , LawfulTraversable.comp_traverse
+      ]
+    rfl
 
 theorem Bazaar.elements_parametric
   [Traversable t] [LawfulTraversable t] (xs : t α)
