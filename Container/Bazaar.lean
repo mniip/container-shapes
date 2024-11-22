@@ -1,6 +1,5 @@
 import Mathlib.Algebra.PUnitInstances.Algebra
 import Mathlib.Control.Fold
-import Mathlib.Control.Functor
 import Mathlib.Data.Vector.Basic
 
 open Mathlib (Vector)
@@ -295,6 +294,78 @@ theorem Bazaar.length_parametric {α β₁ β₂ : Type u}
       , q β₂
       , LawfulTraversable.comp_traverse
       ]
+    rfl
+
+theorem LawfulTraversable.naturality_inwards
+  [Traversable t] [LawfulTraversable t] F G
+  [Applicative F] [LawfulApplicative F] [Applicative G] [LawfulApplicative G]
+  (η : ∀x, F x → G x)
+  (preserves_pure : ∀α x, η α (pure x) = pure x)
+  (preserves_seq : ∀α β f x, η β (f <*> x) = η _ f <*> η α x)
+  {f : α → F β} {xs : t α}
+  {motive : F (t β) → Sort u} {motive' : G (t β) → Sort u}
+  (summon : ∀r, motive r = motive' (η (t β) r))
+  : motive (traverse f xs) = motive' (traverse (η β ∘ f) xs)
+  := by
+    rw [summon]
+    rw [← naturality ⟨η, @preserves_pure, @preserves_seq⟩]
+
+theorem Bazaar.length_parametric' {α β₁ β₂ : Type u}
+  [Traversable t] [LawfulTraversable t] (xs : t α)
+  : (traverse (sell (β:=β₁)) xs).length = (traverse (sell (β:=β₂)) xs).length
+  := by
+    conv =>
+      rw [LawfulTraversable.naturality_inwards
+        (Bazaar α β₁) (Functor.Comp (Bazaar α PEmpty) (Functor.Const PUnit))
+        (λ_ => Functor.Comp.mk
+          ∘ Functor.mapConst (Functor.Const.mk PUnit.unit)
+          ∘ map_continuation PEmpty.elim)
+        (motive:=λb => Bazaar.length b = _)
+        (motive':=λb => Bazaar.length b = _)
+        ]
+      case preserves_pure => tactic => intro _ _; rfl
+      case preserves_seq => tactic => intro _ _ _ _; rfl
+      case summon => tactic => intro _; rfl
+    rw [Function.comp_assoc]
+    conv in _ ∘ sell =>
+      ext
+      rw
+        [ Function.comp_apply
+        , Function.comp_apply
+        , map_continuation_sell
+        , map_const
+        , Function.comp_apply
+        , ← comp_map
+        , Function.const_comp
+        , ← Function.comp_apply (f:=Functor.map _)
+        ]
+    rw [LawfulTraversable.comp_traverse]
+    conv =>
+      rw [LawfulTraversable.naturality_inwards
+        (Bazaar α β₂) (Functor.Comp (Bazaar α PEmpty) (Functor.Const PUnit))
+        (λ_ => Functor.Comp.mk
+          ∘ Functor.mapConst (Functor.Const.mk PUnit.unit)
+          ∘ map_continuation PEmpty.elim)
+        (motive:=λb => _ = Bazaar.length b)
+        (motive':=λb => _ = Bazaar.length b)
+        ]
+      case preserves_pure => tactic => intro _ _; rfl
+      case preserves_seq => tactic => intro _ _ _ _; rfl
+      case summon => tactic => intro _; rfl
+    rw [Function.comp_assoc]
+    conv in _ ∘ sell =>
+      ext
+      rw
+        [ Function.comp_apply
+        , Function.comp_apply
+        , map_continuation_sell
+        , map_const
+        , Function.comp_apply
+        , ← comp_map
+        , Function.const_comp
+        , ← Function.comp_apply (f:=Functor.map _)
+        ]
+    rw [LawfulTraversable.comp_traverse]
     rfl
 
 theorem Bazaar.elements_parametric {α β₁ β₂ : Type u}

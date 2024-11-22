@@ -1,7 +1,5 @@
 import Container.Bazaar
 import Container.Shape
-import Mathlib.Control.Fold
-import Mathlib.Data.Vector.Basic
 
 def Shaped (t : Type u → Type u) [Functor t] (s : Shape t) (α : Type u) : Type u
   := { xs : t α // shape xs = s }
